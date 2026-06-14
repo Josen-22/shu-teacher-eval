@@ -33,9 +33,9 @@ app.jinja_env.auto_reload = app_env != 'production'
 
 db.init_app(app)
 cors_origins_env = os.environ.get('CORS_ORIGINS') or ''
-cors_origins = [o.strip() for o in cors_origins_env.split(',') if o.strip()]
+cors_origins = ['*']
 if not cors_origins:
-    cors_origins = ['http://127.0.0.1:5000', 'http://localhost:5000']
+    cors_origins = ['*']
 CORS(app, supports_credentials=True, origins=cors_origins)
 
 scrape_state = {
