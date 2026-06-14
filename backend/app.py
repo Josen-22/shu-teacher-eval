@@ -427,6 +427,11 @@ with app.app_context():
         teachers = Teacher.query.filter(Teacher.name.in_(list(external_names))).all()
         for t in teachers:
             db.session.delete(t)
+    # Auto-seed teacher data on every startup
+    teacher_count = Teacher.query.count()
+    if teacher_count == 0:
+        seed_database(include_courses=True)
+        print(f'[SEED] Database seeded with {Teacher.query.count()} teachers')
         db.session.commit()
     seen = set()
     dups = []
