@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: shu-teacher-eval
+    env: python
+    rootDir: backend
+    buildCommand: pip install -r ../requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      - key: SESSION_COOKIE_SAMESITE
+        value: Lax
+      - key: COOKIE_SECURE
+        value: "0"
+    plan: free

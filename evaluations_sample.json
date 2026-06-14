@@ -1,0 +1,16 @@
+[
+  {
+    "teacher_name": "许正中",
+    "course_name": "数字经济管理",
+    "rating": 5,
+    "comment": "这是一门非常前沿的课程，许老师讲解非常透彻。",
+    "username": "20220001"
+  },
+  {
+    "teacher_name": "许正中",
+    "course_name": "战略管理",
+    "rating": 4,
+    "comment": "案例非常丰富，收获很大。",
+    "username": "20220002"
+  }
+]

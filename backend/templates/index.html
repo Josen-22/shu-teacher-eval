@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>上海大学管理学院教师评价系统</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .teacher-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    {% raw %}
+    <div id="app">
+        <!-- Navigation -->
+        <nav class="bg-blue-800 text-white shadow-lg sticky top-0 z-50">
+            <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+                <h1 class="text-2xl font-bold flex items-center">
+                    <i class="fas fa-university mr-2"></i>
+                    上大管院教师评价
+                </h1>
+                <div class="hidden md:flex items-center space-x-6">
+                    <a href="#" @click.prevent="currentView = 'home'" class="hover:text-blue-200 transition">首页</a>
+                    <div v-if="user" class="flex items-center space-x-4">
+                        <span class="flex items-center"><i class="fas fa-user-circle mr-2"></i>{{ user.username }}</span>
+                        <button @click="logout" class="text-blue-200 hover:text-white transition">退出</button>
+                    </div>
+                    <div v-else class="text-sm text-blue-200">正在验证登录状态...</div>
+                </div>
+
+                <button class="md:hidden p-2 rounded-lg hover:bg-blue-700 transition" @click="mobileMenuOpen = !mobileMenuOpen" aria-label="menu">
+                    <i class="fas" :class="mobileMenuOpen ? 'fa-times' : 'fa-bars'"></i>
+                </button>
+            </div>
+
+            <div v-if="mobileMenuOpen" class="md:hidden border-t border-blue-700">
+                <div class="container mx-auto px-4 py-4 space-y-3">
+                    <a href="#" @click.prevent="currentView = 'home'; mobileMenuOpen = false" class="block py-2 font-medium hover:text-blue-200 transition">首页</a>
+
+                    <div v-if="user" class="pt-2 space-y-3">
+                        <div class="flex items-center">
+                            <i class="fas fa-user-circle mr-2"></i>
+                            <span class="font-medium">{{ user.username }}</span>
+                        </div>
+                        <button @click="logout(); mobileMenuOpen = false" class="w-full text-left text-blue-200 hover:text-white transition py-2">退出</button>
+                    </div>
+                    <div v-else class="pt-2 text-sm text-blue-200">正在验证登录状态...</div>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="container mx-auto px-4 py-8">
+            <!-- Home View -->
+            <div v-if="currentView === 'home'">
+                <div class="mb-10 text-center">
+                    <h2 class="text-4xl font-extrabold text-gray-800 mb-4">探索我们的教师团队</h2>
+                    <p class="text-gray-600 text-lg max-w-2xl mx-auto">查看教师信息、主讲课程及真实的同学评价，帮助你更好地规划学术路径。</p>
+                    <div class="mt-8 max-w-3xl mx-auto flex flex-col md:flex-row gap-4">
+                        <div class="flex-grow flex shadow-sm rounded-lg overflow-hidden border border-gray-200 bg-white">
+                            <span class="bg-white flex items-center px-4 text-gray-400"><i class="fas fa-search"></i></span>
+                            <input type="text" v-model="searchQuery" placeholder="搜索教师姓名、系所或研究方向..." class="w-full px-4 py-4 focus:outline-none text-gray-700">
+                        </div>
+                        <select v-model="selectedDepartment" class="px-4 py-4 rounded-lg border border-gray-200 bg-white focus:ring-2 focus:ring-blue-600 focus:outline-none text-gray-700 min-w-[150px]">
+                            <option v-for="dept in departments" :key="dept" :value="dept">{{ dept }}</option>
+                        </select>
+                    </div>
+                    <div class="mt-6 flex justify-center items-center space-x-6">
+                        <button @click="triggerScrape" class="text-sm text-blue-600 hover:underline flex items-center">
+                            <i class="fas fa-sync-alt mr-1" :class="{'animate-spin': isScraping}"></i>
+                            更新教师数据
+                        </button>
+                        <span class="text-sm text-gray-500 flex items-center">
+                            <i class="fas fa-user-friends mr-1"></i>
+                            已显示 {{ Object.values(groupedTeachers).reduce((acc, titles) => acc + Object.values(titles).flat().length, 0) }} 位教师
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Department Directory Navigation -->
+                <div v-if="!loading && Object.keys(groupedTeachers).length > 0" class="mb-12 bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                    <div class="flex items-start">
+                        <div class="bg-blue-50 p-3 rounded-lg mr-4">
+                            <i class="fas fa-sitemap text-blue-600 text-xl"></i>
+                        </div>
+                        <div class="flex-grow">
+                            <h3 class="text-lg font-bold text-gray-800 mb-4 flex items-center">
+                                系所分类目录
+                                <span class="ml-3 px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">快速定位</span>
+                            </h3>
+                            <div class="flex flex-wrap gap-3">
+                                <button v-for="(titles, deptName) in groupedTeachers" :key="deptName" 
+                                        @click="scrollToDept(deptName)"
+                                        class="group bg-gray-50 hover:bg-blue-600 hover:text-white px-5 py-2.5 rounded-lg text-sm transition-all duration-300 font-bold border border-gray-200 hover:border-blue-600 flex items-center">
+                                    {{ deptName }}
+                                    <span class="ml-2 text-xs bg-gray-200 group-hover:bg-blue-500 text-gray-600 group-hover:text-white px-1.5 py-0.5 rounded transition-colors">
+                                        {{ Object.values(titles).flat().length }}
+                                    </span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Teacher Grid -->
+                <div v-if="loading" class="flex justify-center py-20">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-800"></div>
+                </div>
+                <div v-else class="space-y-20">
+                    <div v-for="(titles, deptName) in groupedTeachers" :key="deptName" :id="deptName">
+                        <!-- Header styled like the official website -->
+                        <div class="flex items-center mb-8 bg-gray-200 h-11 overflow-hidden rounded-sm shadow-sm">
+                            <div class="bg-[#335c94] text-white px-8 h-full flex items-center font-bold text-lg min-w-[240px]">
+                                {{ deptName }}
+                            </div>
+                        </div>
+                        
+                        <!-- Second Level: Titles (Professor, etc.) -->
+                        <div v-for="(deptTeachers, titleName) in titles" :key="titleName" class="mb-12">
+                            <div class="flex items-center mb-6 pl-4">
+                                <h4 class="text-lg font-bold text-blue-800">{{ titleName }}</h4>
+                                <div class="ml-4 flex-grow h-px bg-blue-100"></div>
+                                <span class="ml-4 text-xs text-gray-400 font-medium">{{ deptTeachers.length }} 位</span>
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                                <div v-for="teacher in deptTeachers" :key="teacher.id" 
+                                     class="bg-white rounded-lg shadow-sm overflow-hidden teacher-card transition-all duration-300 border border-gray-200 flex flex-col hover:border-blue-300 hover:shadow-lg">
+                                    <div class="p-5 flex-grow">
+                                        <div class="mb-3">
+                                            <h3 class="text-lg font-bold text-gray-900 mb-1">{{ teacher.name }}</h3>
+                                            <p class="text-blue-700 text-xs font-semibold">{{ teacher.title }}</p>
+                                        </div>
+                                        <div class="space-y-2 mb-4">
+                                            <p class="text-gray-500 text-xs flex items-center truncate" :title="teacher.email">
+                                                <i class="fas fa-envelope w-4 text-gray-400"></i>
+                                                {{ teacher.email || '暂无邮箱' }}
+                                            </p>
+                                            <p class="text-gray-600 text-xs line-clamp-2 min-h-[2rem]">
+                                                <span class="font-semibold text-gray-400 mr-1">研究:</span>{{ teacher.research || '暂无研究方向' }}
+                                            </p>
+                                        </div>
+                                        <div class="border-t border-gray-50 pt-3">
+                                            <div class="flex flex-wrap gap-1.5">
+                                                <span v-for="course in teacher.courses.slice(0, 2)" :key="course" 
+                                                      class="bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-[10px] border border-blue-100/50">
+                                                    {{ course }}
+                                                </span>
+                                                <span v-if="teacher.courses.length > 2" class="text-gray-400 text-[10px] self-center">+{{ teacher.courses.length - 2 }}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button @click="viewTeacher(teacher.id)" class="w-full bg-gray-50 text-blue-800 py-3 text-xs font-bold hover:bg-blue-700 hover:text-white transition-all duration-300 border-t border-gray-100 uppercase tracking-tighter">
+                                        查看详细评价
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Teacher Detail View -->
+            <div v-if="currentView === 'detail'" class="max-w-4xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100">
+                <div class="bg-gradient-to-r from-blue-800 to-blue-600 px-8 py-10 text-white">
+                    <button @click="currentView = 'home'" class="mb-6 flex items-center text-blue-100 hover:text-white transition">
+                        <i class="fas fa-arrow-left mr-2"></i>返回列表
+                    </button>
+                    <div class="flex flex-col md:flex-row md:items-end justify-between">
+                        <div>
+                            <h2 class="text-4xl font-bold mb-2">{{ selectedTeacher.name }}</h2>
+                            <p class="text-xl text-blue-100">{{ selectedTeacher.title }} · {{ selectedTeacher.department }}</p>
+                        </div>
+                        <div class="mt-4 md:mt-0">
+                            <p class="text-blue-100 flex items-center"><i class="fas fa-envelope mr-2"></i>{{ selectedTeacher.email }}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="p-8">
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-10">
+                        <!-- Left Column: Info -->
+                        <div class="lg:col-span-1 space-y-8">
+                            <section>
+                                <h4 class="text-gray-900 font-bold border-b pb-2 mb-4">研究方向</h4>
+                                <p class="text-gray-700 leading-relaxed">{{ selectedTeacher.research }}</p>
+                            </section>
+                            <section>
+                                <h4 class="text-gray-900 font-bold border-b pb-2 mb-4">个人简介</h4>
+                                <p class="text-gray-700 text-sm leading-relaxed">{{ selectedTeacher.bio }}</p>
+                            </section>
+                        </div>
+
+                        <!-- Right Column: Courses & Evaluations -->
+                        <div class="lg:col-span-2">
+                            <div class="flex items-center justify-between mb-6">
+                                <h4 class="text-2xl font-bold text-gray-900 flex items-center">
+                                    <i class="fas fa-book-open mr-3 text-blue-600"></i>
+                                    课程与评价
+                                </h4>
+                                <div class="flex items-center gap-4">
+                                    <button v-if="user" @click="openEvalForm(null)" class="text-blue-600 text-sm hover:underline font-medium">
+                                        <i class="fas fa-plus mr-1"></i>发表评价
+                                    </button>
+                                    <button @click="showAddCourseForm = true" class="text-blue-600 text-sm hover:underline font-medium">
+                                        <i class="fas fa-plus mr-1"></i>添加课程
+                                    </button>
+                                </div>
+                            </div>
+                            <div v-if="selectedTeacher.courses.length === 0" class="text-gray-500 py-4 italic">
+                                暂未收录该老师的主讲课程信息。
+                            </div>
+                            <div v-for="course in selectedTeacher.courses" :key="course.id" class="mb-8 border border-gray-200 rounded-xl overflow-hidden">
+                                <div class="bg-gray-50 px-6 py-4 border-b flex justify-between items-center">
+                                    <h5 class="font-bold text-lg text-gray-800">{{ course.name }}</h5>
+                                    <button v-if="user" @click="openEvalForm(course)" class="text-blue-600 text-sm hover:underline font-medium">
+                                        <i class="fas fa-plus mr-1"></i>发表评价
+                                    </button>
+                                </div>
+                                <div class="p-6">
+                                    <div v-if="course.evaluations.length === 0" class="text-gray-400 text-center py-6">
+                                        <i class="far fa-comment-dots text-3xl mb-2"></i>
+                                        <p>暂无评价，快来成为第一个评价的人吧！</p>
+                                    </div>
+                                    <div v-else class="space-y-6">
+                                        <div v-for="eval in course.evaluations" :key="eval.id" class="flex space-x-4">
+                                            <div class="flex-shrink-0">
+                                                <div class="w-10 h-10 bg-blue-100 text-blue-800 rounded-full flex items-center justify-center font-bold">
+                                                    {{ eval.user[0].toUpperCase() }}
+                                                </div>
+                                            </div>
+                                            <div class="flex-grow">
+                                                <div class="flex justify-between items-start mb-1">
+                                                    <span class="font-bold text-gray-800">{{ eval.user }}</span>
+                                                    <div class="flex text-yellow-400 text-xs">
+                                                        <i v-for="i in 5" :key="i" class="fa-star" :class="i <= eval.rating ? 'fas' : 'far'"></i>
+                                                    </div>
+                                                </div>
+                                                <p class="text-gray-600 text-sm">{{ eval.comment }}</p>
+                                                <p class="text-gray-400 text-xs mt-2">{{ new Date(eval.created_at).toLocaleDateString() }}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Evaluation Form Modal -->
+        <div v-if="showEvalForm" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
+            <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-2xl font-bold text-gray-800">
+                        发表评价 - {{ selectedCourse ? selectedCourse.name : (selectedCourseName || '请选择课程') }}
+                    </h3>
+                    <button @click="showEvalForm = false" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
+                </div>
+                <div v-if="!selectedCourse" class="mb-6 space-y-2">
+                    <label class="block text-gray-700 text-sm font-bold">选择课程（课程库）</label>
+                    <input type="text" v-model="courseQuery" class="w-full px-4 py-3 rounded-lg border focus:ring-2 focus:ring-blue-600 focus:outline-none" placeholder="输入关键字筛选课程...">
+                    <select v-model="selectedCourseName" class="w-full px-4 py-3 rounded-lg border focus:ring-2 focus:ring-blue-600 focus:outline-none">
+                        <option value="">请选择</option>
+                        <option v-for="c in filteredCourseLibrary" :key="c" :value="c">{{ c }}</option>
+                    </select>
+                </div>
+                <div class="mb-6 flex justify-center space-x-4">
+                    <i v-for="i in 5" :key="i" @click="evalForm.rating = i" 
+                       class="fa-star text-3xl cursor-pointer transition"
+                       :class="i <= evalForm.rating ? 'fas text-yellow-400' : 'far text-gray-300'"></i>
+                </div>
+                <div class="mb-6">
+                    <label class="block text-gray-700 text-sm font-bold mb-2">评价内容</label>
+                    <textarea v-model="evalForm.comment" rows="4" class="w-full px-4 py-3 rounded-lg border focus:ring-2 focus:ring-blue-600 focus:outline-none" placeholder="分享你对这门课的看法..."></textarea>
+                </div>
+                <button @click="submitEvaluation" class="w-full bg-blue-800 text-white py-3 rounded-lg font-bold hover:bg-blue-900 transition">提交评价</button>
+            </div>
+        </div>
+
+        <div v-if="showAddCourseForm" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
+            <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-2xl font-bold text-gray-800">添加课程 - {{ selectedTeacher.name }}</h3>
+                    <button @click="showAddCourseForm = false" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
+                </div>
+                <form @submit.prevent="submitAddCourse" class="space-y-4">
+                    <div>
+                        <label class="block text-gray-700 text-sm font-bold mb-2">课程名称</label>
+                        <input type="text" v-model="addCourseForm.name" class="w-full px-4 py-3 rounded-lg border focus:ring-2 focus:ring-blue-600 focus:outline-none" maxlength="100" required>
+                    </div>
+                    <button type="submit" class="w-full bg-blue-800 text-white py-3 rounded-lg font-bold hover:bg-blue-900 transition">添加</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    {% endraw %}
+    <script>
+        console.log("Vue script started");
+        const { createApp, ref, onMounted, computed } = Vue;
+
+        createApp({
+            setup() {
+                const currentView = ref('home');
+                const teachers = ref([]);
+                const searchQuery = ref('');
+                const loading = ref(true);
+                const isScraping = ref(false);
+                const user = ref(null);
+                const mobileMenuOpen = ref(false);
+                
+                const showEvalForm = ref(false);
+                const showAddCourseForm = ref(false);
+                
+                const selectedTeacher = ref(null);
+                const selectedCourse = ref(null);
+                const courseLibrary = ref([]);
+                const courseCatalogLoaded = ref(false);
+                const courseQuery = ref('');
+                const selectedCourseName = ref('');
+                const evalForm = ref({ rating: 5, comment: '' });
+                const addCourseForm = ref({ name: '' });
+
+                const API_BASE = '/api';
+
+                const redirectToLogin = () => {
+                    const next = encodeURIComponent(window.location.pathname + window.location.search);
+                    window.location.href = `/login?next=${next}`;
+                };
+
+                const apiRequest = async (path, options = {}) => {
+                    const res = await fetch(`${API_BASE}${path}`, {
+                        credentials: 'include',
+                        ...options
+                    });
+                    if (res.status === 401) {
+                        redirectToLogin();
+                        throw new Error('Authentication required');
+                    }
+                    return res;
+                };
+
+                const fetchCurrentUser = async () => {
+                    const res = await apiRequest('/me');
+                    user.value = await res.json();
+                };
+
+                const fetchTeachers = async () => {
+                    loading.value = true;
+                    try {
+                        const res = await apiRequest('/teachers');
+                        teachers.value = await res.json();
+                    } catch (e) {
+                        console.error(e);
+                    } finally {
+                        loading.value = false;
+                    }
+                };
+
+                const normalizationMap = {
+                    '管理科学与工程': '管理科学与工程系',
+                    '管科系': '管理科学与工程系',
+                    '管理科学系': '管理科学与工程系',
+                    '管理科学与工程，管院202办公室': '管理科学与工程系',
+                    '会计学系': '会计系',
+                    '上海大学管理学院会计系': '会计系',
+                    '工商管理系人力资源管理专业': '工商管理系',
+                    '上海大学管理学院工商管理系': '工商管理系',
+                    '上海大学—管理学院—工商管理系': '工商管理系',
+                    '上海大学-管理学院-工商管理系': '工商管理系',
+                    '现代物流研究中心；工商管理系': '工商管理系',
+                    '信管系': '信息管理系',
+                    '信息管理系、上海大学实时企业研究所': '信息管理系',
+                    '信息管理系 、上海大学实时企业研究所': '信息管理系',
+                    '上海大学管理学院': '其他'
+                };
+
+                const allowedDepartments = ['管理科学与工程系', '工商管理系', '会计系', '信息管理系', '其他'];
+
+                const normalizeDepartment = (rawDept) => {
+                    let dept = (rawDept || '').toString().trim();
+                    dept = dept.replace(/\s+/g, '');
+                    if (!dept) return '其他';
+                    if (normalizationMap[dept]) return normalizationMap[dept];
+                    if (allowedDepartments.includes(dept)) return dept;
+                    return '其他';
+                };
+
+                const selectedDepartment = ref('全部');
+                const departments = computed(() => {
+                    return ['全部', ...allowedDepartments];
+                });
+
+                const filteredTeachers = computed(() => {
+                    let result = teachers.value;
+                    if (selectedDepartment.value !== '全部') {
+                        result = result.filter(t => normalizeDepartment(t.department) === selectedDepartment.value);
+                    }
+                    if (!searchQuery.value) return result;
+                    const q = searchQuery.value.toLowerCase();
+                    return result.filter(t => 
+                        t.name.toLowerCase().includes(q) || 
+                        normalizeDepartment(t.department).toLowerCase().includes(q) ||
+                        (t.research && t.research.toLowerCase().includes(q))
+                    );
+                });
+
+                const groupedTeachers = computed(() => {
+                    console.log("Computing groupedTeachers...");
+                    const groups = {};
+
+                    const titleOrder = ['教授', '副教授', '讲师', '助教', '其他'];
+
+                    filteredTeachers.value.forEach(teacher => {
+                        // 1. Normalize Department
+                        const dept = normalizeDepartment(teacher.department);
+
+                        // 2. Determine Title Category
+                        let titleGroup = '其他';
+                        const t = (teacher.title || '').toLowerCase();
+                        if (t.includes('教授')) {
+                            titleGroup = t.includes('副') ? '副教授' : '教授';
+                        } else if (t.includes('讲师')) {
+                            titleGroup = '讲师';
+                        } else if (t.includes('助教')) {
+                            titleGroup = '助教';
+                        }
+
+                        if (!groups[dept]) groups[dept] = {};
+                        if (!groups[dept][titleGroup]) groups[dept][titleGroup] = [];
+                        groups[dept][titleGroup].push(teacher);
+                    });
+
+                    // 4. Sort and return
+                    const deptOrder = ['管理科学与工程系', '工商管理系', '会计系', '信息管理系'];
+                    const sortedDepts = Object.keys(groups).sort((a, b) => {
+                        const idxA = deptOrder.indexOf(a);
+                        const idxB = deptOrder.indexOf(b);
+                        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+                        if (idxA !== -1) return -1;
+                        if (idxB !== -1) return 1;
+                        return a.localeCompare(b);
+                    });
+                    
+                    const finalStructure = {};
+                    sortedDepts.forEach(dept => {
+                        const deptTitles = groups[dept];
+                        const sortedTitles = Object.keys(deptTitles).sort((a, b) => {
+                            const idxA = titleOrder.indexOf(a);
+                            const idxB = titleOrder.indexOf(b);
+                            if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+                            if (idxA !== -1) return -1;
+                            if (idxB !== -1) return 1;
+                            return a.localeCompare(b);
+                        });
+
+                        finalStructure[dept] = {};
+                        sortedTitles.forEach(title => {
+                            finalStructure[dept][title] = deptTitles[title];
+                        });
+                    });
+                    console.log("Grouped teachers structure:", finalStructure);
+                    return finalStructure;
+                });
+
+                const viewTeacher = async (id) => {
+                    try {
+                        const res = await apiRequest(`/teachers/${id}`);
+                        selectedTeacher.value = await res.json();
+                        currentView.value = 'detail';
+                        window.scrollTo(0, 0);
+                    } catch (e) {
+                        console.error(e);
+                    }
+                };
+
+                const logout = async () => {
+                    try {
+                        await fetch(`${API_BASE}/logout`, { method: 'POST', credentials: 'include' });
+                    } catch (e) {}
+                    user.value = null;
+                    window.location.href = '/login';
+                };
+
+                const triggerScrape = async () => {
+                    try {
+                        if (!confirm('确定要更新教师数据吗？这将从官网重新爬取信息，可能需要几分钟。')) return;
+                        isScraping.value = true;
+                        const res = await apiRequest('/scrape', { method: 'POST' });
+                        const data = await res.json().catch(() => ({}));
+                        if (!res.ok && res.status !== 202) {
+                            alert(data.error || data.message || '更新失败');
+                            isScraping.value = false;
+                            return;
+                        }
+
+                        const poll = async () => {
+                            try {
+                                const r = await apiRequest('/scrape/status');
+                                const s = await r.json();
+                                if (!s.running) {
+                                    isScraping.value = false;
+                                    await fetchTeachers();
+                                    if (s.last_error) {
+                                        alert('更新完成，但出现错误：' + s.last_error);
+                                    } else {
+                                        alert('更新完成');
+                                    }
+                                    return;
+                                }
+                            } catch (e) {}
+                            setTimeout(poll, 2000);
+                        };
+                        poll();
+                    } catch (e) {
+                        alert('更新失败');
+                        isScraping.value = false;
+                    }
+                };
+
+                const scrollToDept = (id) => {
+                    const el = document.getElementById(id);
+                    if (el) {
+                        const offset = 100; // Account for sticky nav
+                        const bodyRect = document.body.getBoundingClientRect().top;
+                        const elementRect = el.getBoundingClientRect().top;
+                        const elementPosition = elementRect - bodyRect;
+                        const offsetPosition = elementPosition - offset;
+
+                        window.scrollTo({
+                            top: offsetPosition,
+                            behavior: 'smooth'
+                        });
+                    }
+                };
+
+                const fetchCourseCatalog = async () => {
+                    if (courseCatalogLoaded.value) return;
+                    try {
+                        const res = await apiRequest('/course-catalog');
+                        const data = await res.json();
+                        courseLibrary.value = data.all || [];
+                        courseCatalogLoaded.value = true;
+                    } catch (e) {
+                        courseLibrary.value = [];
+                        courseCatalogLoaded.value = true;
+                    }
+                };
+
+                const filteredCourseLibrary = computed(() => {
+                    const q = (courseQuery.value || '').trim();
+                    if (!q) return courseLibrary.value;
+                    return courseLibrary.value.filter(c => c.includes(q));
+                });
+
+                const openEvalForm = async (course) => {
+                    selectedCourse.value = course;
+                    courseQuery.value = '';
+                    selectedCourseName.value = course ? course.name : '';
+                    await fetchCourseCatalog();
+                    evalForm.value = { rating: 5, comment: '' };
+                    showEvalForm.value = true;
+                };
+
+                const submitAddCourse = async () => {
+                    const name = (addCourseForm.value.name || '').trim();
+                    if (!name) return;
+                    try {
+                        const res = await apiRequest(`/teachers/${selectedTeacher.value.id}/courses`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ name })
+                        });
+                        const data = await res.json();
+                        if (!res.ok) {
+                            alert(data.error || '添加失败');
+                            return;
+                        }
+                        showAddCourseForm.value = false;
+                        addCourseForm.value = { name: '' };
+                        await viewTeacher(selectedTeacher.value.id);
+                    } catch (e) {
+                        alert('添加失败');
+                    }
+                };
+
+                const submitEvaluation = async () => {
+                    try {
+                        if (!selectedCourse.value) {
+                            const name = (selectedCourseName.value || '').trim();
+                            if (!name) {
+                                alert('请选择课程');
+                                return;
+                            }
+                        }
+                        const res = await apiRequest('/evaluate', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(selectedCourse.value ? {
+                                course_id: selectedCourse.value.id,
+                                ...evalForm.value
+                            } : {
+                                teacher_id: selectedTeacher.value.id,
+                                course_name: selectedCourseName.value,
+                                ...evalForm.value
+                            })
+                        });
+                        if (res.ok) {
+                            showEvalForm.value = false;
+                            await viewTeacher(selectedTeacher.value.id);
+                        } else {
+                            const data = await res.json();
+                            alert(data.error || '提交失败');
+                        }
+                    } catch (e) {
+                        alert('提交错误');
+                    }
+                };
+
+                onMounted(async () => {
+                    await fetchCurrentUser();
+                    await fetchTeachers();
+                });
+
+                return {
+                    currentView, teachers, searchQuery, loading, isScraping, user,
+                    mobileMenuOpen,
+                    showEvalForm, showAddCourseForm, selectedTeacher,
+                    selectedCourse, courseQuery, selectedCourseName, filteredCourseLibrary, evalForm, filteredTeachers, selectedDepartment, departments, groupedTeachers,
+                    fetchTeachers, viewTeacher, logout, triggerScrape, scrollToDept,
+                    openEvalForm, submitEvaluation, addCourseForm, submitAddCourse
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
