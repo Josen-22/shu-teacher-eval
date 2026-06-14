@@ -13,6 +13,7 @@ scraper_log.txt
 Thumbs.db
 .secret_key
 instance/
+!instance/management_college.db
 
 # OCR intermediate files & dev scripts
 *_raw_ocr.txt
