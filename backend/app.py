@@ -14,12 +14,12 @@ import time
 from scraper import run_scraper
 
 app = Flask(__name__)
-# Use absolute path for the database in the instance folder of the root directory
+# Use /tmp for Vercel (writable), instance/ for local/dev
 basedir = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
-instance_path = os.path.join(basedir, 'instance')
-if not os.path.exists(instance_path):
-    os.makedirs(instance_path)
-db_path = os.path.join(instance_path, 'management_college.db')
+_db_dir = os.environ.get('DB_DIR') or os.path.join(basedir, 'instance')
+if not os.path.exists(_db_dir):
+    os.makedirs(_db_dir, exist_ok=True)
+db_path = os.path.join(_db_dir, 'management_college.db')
 app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or 'dev-secret-key'
