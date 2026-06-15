@@ -436,8 +436,8 @@ with app.app_context():
     # Auto-create admin account if not exists
     admin = User.query.filter_by(username='admin').first()
     if not admin:
-        admin = User(username='admin', role='admin')
-        admin.set_password('admin123')
+        admin = User(username='admin', role='admin',
+                 password_hash=generate_password_hash('admin123'))
         db.session.add(admin)
         db.session.commit()
         print('[SEED] Admin account created: admin / admin123')
