@@ -433,6 +433,14 @@ with app.app_context():
         seed_database(include_courses=True)
         print(f'[SEED] Database seeded with {Teacher.query.count()} teachers')
         db.session.commit()
+    # Auto-create admin account if not exists
+    admin = User.query.filter_by(username='admin').first()
+    if not admin:
+        admin = User(username='admin', role='admin')
+        admin.set_password('admin123')
+        db.session.add(admin)
+        db.session.commit()
+        print('[SEED] Admin account created: admin / admin123')
     seen = set()
     dups = []
     for e in Evaluation.query.order_by(Evaluation.course_id, Evaluation.user_id, Evaluation.created_at.desc()).all():
